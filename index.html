@@ -290,15 +290,14 @@ body.agent-mode button {
     <span class="badge">Clique sur la carte pour ajouter un arbre</span>
   </div>
 
-<div class="header-actions" style="display:flex; gap:10px; align-items:center;">
-  <button id="agentModeBtn" class="secondary" type="button">
-    📱 Mode agent
-  </button>
+<button id="agentModeBtn" class="secondary">
+  📱 Mode agent
+</button>
 
-  <button id="logoutBtn" class="secondary" type="button" style="display:none;">
+  <!-- 🚪 Déconnexion (visible uniquement si connecté) -->
+  <button id="logoutBtn" class="secondary" style="display:none;">
     🚪 Déconnexion
   </button>
-</div>
 
 
 </header>
@@ -539,18 +538,6 @@ body.agent-mode button {
 <div id="loginOverlay">
   <div class="loginBox">
     <h2>Accès sécurisé</h2>
-    <select id="loginSelect">
-      <option value="admin">Admin</option>
-      <option value="Hautes Loges - Briqueterie">Hautes Loges - Briqueterie</option>
-      <option value="Bourg">Bourg</option>
-      <option value="Buisson - Delcencerie">Buisson - Delcencerie</option>
-      <option value="Mairie - Quesne">Mairie - Quesne</option>
-      <option value="Pont - Plouich - Clémenceau">Pont - Plouich - Clémenceau</option>
-      <option value="Cimetière Delcencerie">Cimetière Delcencerie</option>
-      <option value="Cimetière Pont">Cimetière Pont</option>
-      <option value="Hippodrome">Hippodrome</option>
-      <option value="Ferme aux Oies">Ferme aux Oies</option>
-    </select>
     <input type="password" id="passwordInput" placeholder="Mot de passe" />
     <button id="loginBtn">Se connecter</button>
     <p id="loginError"></p>

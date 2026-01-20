@@ -31,62 +31,31 @@
   let lastDeletedTree = null;
   let pendingPhotos = [];
 let authToken = sessionStorage.getItem("authToken");
+
+// ------------------------------
+// 🔐 Déconnexion
+// ------------------------------
+function updateLogoutButtonVisibility() {
+  const btn = document.getElementById("logoutBtn");
+  if (!btn) return;
+  btn.style.display = authToken ? "inline-flex" : "none";
+}
+
+function logout() {
+  sessionStorage.removeItem("authToken");
+  sessionStorage.removeItem("userRole");
+  sessionStorage.removeItem("userSecteur");
+
+  authToken = null;
+  isAuthenticated = false;
+
+  // Retour écran de connexion
+  const overlay = document.getElementById("loginOverlay");
+  if (overlay) overlay.style.display = "flex";
+
+  updateLogoutButtonVisibility();
+}
 let isAuthenticated = !!authToken;
-
-// =========================
-// 🔐 ROLES
-// =========================
-let userRole = sessionStorage.getItem("userRole") || ""; // "admin" | "secteur"
-let userSecteur = sessionStorage.getItem("userSecteur") || ""; // nom du secteur si role=secteur
-
-function isSectorUser() {
-  return userRole === "secteur" && !!userSecteur;
-}
-
-function isTreeAllowed(t) {
-  if (!isSectorUser()) return true;
-  return (t?.secteur || "") === userSecteur;
-}
-
-function applyRoleUI() {
-  if (!isSectorUser()) {
-    // Admin : tout visible
-    document.body.classList.remove("role-secteur");
-    return;
-  }
-
-  document.body.classList.add("role-secteur");
-
-  // ⛔ secteur : masquer champ État + partie Élagages/Abattages
-  const etatLabel = document.querySelector("label[for='etat']") || null;
-  if (etatLabel) etatLabel.style.display = "none";
-  const etatSelect = document.getElementById("etat");
-  if (etatSelect) {
-    etatSelect.style.display = "none";
-    etatSelect.disabled = true;
-  }
-
-  // masquer bloc travaux depuis le titre "Élagages / Abattages" jusqu'à avant "Commentaire"
-  const editor = document.getElementById("editorCard");
-  if (editor) {
-    const nodes = Array.from(editor.children);
-    const h2Travaux = nodes.find(n => n.tagName === "H2" && n.textContent.trim() === "Élagages / Abattages");
-    const commentLabel = nodes.find(n => n.tagName === "LABEL" && n.textContent.trim() === "Commentaire");
-
-    if (h2Travaux && commentLabel) {
-      let hide = false;
-      for (const n of nodes) {
-        if (n === h2Travaux) hide = true;
-        if (hide && n !== commentLabel) {
-          n.style.display = "none";
-        }
-        if (n === commentLabel) {
-          hide = false;
-        }
-      }
-    }
-  }
-}
 
 
   const markers = new Map(); // id -> marker
@@ -901,8 +870,6 @@ renderTreePreview(t);
   // =========================
 
 function addOrUpdateMarker(t) {
-  // 🔒 Sécurité : un compte secteur ne doit voir que son secteur
-  if (!isTreeAllowed(t)) return;
   let m = markers.get(t.id);
 
   const icon = createTreeIcon(
@@ -1433,8 +1400,7 @@ async function loadTreesFromSheets() {
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error("Format Sheets invalide");
 
-    // 🔒 Filtrage secteur (si utilisateur secteur)
-    trees = isSectorUser() ? data.filter(isTreeAllowed) : data;
+    trees = data;
     saveTreesLocal();
 
     console.log("📥 Données chargées depuis Google Sheets :", trees.length);
@@ -1492,9 +1458,6 @@ async function startApp() {
   }
 
   await loadTreesFromSheets();
-
-  // appliquer droits UI
-  applyRoleUI();
 
   initMap();
   addLegendToMap();
@@ -1602,7 +1565,6 @@ function getColorFromEtat(etat) {
 }
 
 document.getElementById("loginBtn")?.addEventListener("click", async () => {
-  const login = document.getElementById("loginSelect")?.value || "admin";
   const pwd = document.getElementById("passwordInput").value;
   const err = document.getElementById("loginError");
 
@@ -1613,7 +1575,6 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
       method: "POST",
       body: new URLSearchParams({
         action: "login",
-        login,
         password: pwd
       })
     });
@@ -1627,12 +1588,10 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 
     authToken = data.token;
     sessionStorage.setItem("authToken", authToken);
-    sessionStorage.setItem("userRole", data.role || "admin");
-    sessionStorage.setItem("userSecteur", data.secteur || "");
-
-    userRole = sessionStorage.getItem("userRole") || "admin";
-    userSecteur = sessionStorage.getItem("userSecteur") || "";
     isAuthenticated = true;
+
+    // Affiche le bouton Déconnexion
+    updateLogoutButtonVisibility();
 
     document.getElementById("loginOverlay").style.display = "none";
     startApp();
@@ -1641,6 +1600,9 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
     err.textContent = "Erreur de connexion";
   }
 });
+
+// Bouton Déconnexion
+document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
 
 //---------Tableau élagage---------------
