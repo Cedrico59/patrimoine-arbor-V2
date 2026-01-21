@@ -27,8 +27,6 @@
   let cityLayer = null;
 
   let trees = [];
-
-  let adminSecteurFilter = "__ALL__";
   let selectedId = null;
   let lastDeletedTree = null;
   let pendingPhotos = [];
@@ -48,14 +46,7 @@ function logout() {
   sessionStorage.removeItem("userRole");
   sessionStorage.removeItem("userSecteur");
 
-  
-
-  const badge = document.getElementById("userDebugBadge");
-  if (badge) badge.remove();
-  const adminBox = document.getElementById("adminSecteurBox");
-  if (adminBox) adminBox.remove();
-  adminSecteurFilter = "__ALL__";
-authToken = null;
+  authToken = null;
   isAuthenticated = false;
 
   // Retour écran de connexion
@@ -78,103 +69,6 @@ function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
 
-
-// =========================
-// 👁️ VISIBILITÉ PAR SECTEUR (Admin: tout, Utilisateur: son secteur)
-// =========================
-function _normSecteur(v) {
-  return (v || "").toString().trim().toLowerCase();
-}
-
-function getVisibleTrees() {
-  const role = (sessionStorage.getItem("userRole") || "").toLowerCase();
-  const userSecteur = _normSecteur(sessionStorage.getItem("userSecteur") || "");
-
-  if (role === "admin") {
-    if (adminSecteurFilter === "__ALL__") return trees;
-    return trees.filter((t) => _normSecteur(t.secteur) === _normSecteur(adminSecteurFilter));
-  }
-
-  return trees.filter((t) => _normSecteur(t.secteur) === userSecteur);
-}
-
-function showUserDebugBadge() {
-  const userRole = (sessionStorage.getItem("userRole") || "").toLowerCase();
-  const userSecteur = (sessionStorage.getItem("userSecteur") || "").trim();
-  if (!userRole) return;
-
-  let badge = document.getElementById("userDebugBadge");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "userDebugBadge";
-    badge.style.position = "fixed";
-    badge.style.top = "10px";
-    badge.style.right = "10px";
-    badge.style.zIndex = "9999";
-    badge.style.background = "rgba(0,0,0,0.75)";
-    badge.style.color = "white";
-    badge.style.padding = "8px 12px";
-    badge.style.borderRadius = "8px";
-    badge.style.fontSize = "13px";
-    badge.style.fontFamily = "Arial, sans-serif";
-    badge.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
-    document.body.appendChild(badge);
-  }
-
-  badge.innerHTML = `
-    <div><b>Rôle :</b> ${userRole}</div>
-    <div><b>Secteur :</b> ${userSecteur || "-"}</div>
-  `;
-}
-
-function showAdminSecteurDropdown() {
-  const role = (sessionStorage.getItem("userRole") || "").toLowerCase();
-  if (role !== "admin") return;
-
-  let box = document.getElementById("adminSecteurBox");
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "adminSecteurBox";
-    box.style.position = "fixed";
-    box.style.top = "10px";
-    box.style.right = "10px";
-    box.style.zIndex = "9999";
-    box.style.background = "rgba(255,255,255,0.95)";
-    box.style.color = "#111";
-    box.style.padding = "10px 12px";
-    box.style.borderRadius = "10px";
-    box.style.fontSize = "13px";
-    box.style.fontFamily = "Arial, sans-serif";
-    box.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
-    document.body.appendChild(box);
-  }
-
-  // liste unique des secteurs existants
-  const secteurs = [...new Set(trees.map(t => (t.secteur || "").toString().trim()).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
-
-  const optionsHtml = [
-    `<option value="__ALL__">Tous les secteurs</option>`,
-    ...secteurs.map(s => `<option value="${s}">${s}</option>`)
-  ].join("");
-
-  box.innerHTML = `
-    <div style="margin-bottom:6px;"><b>Filtre secteur (Admin)</b></div>
-    <select id="adminSecteurSelect" style="width:180px; padding:6px; border-radius:8px;">
-      ${optionsHtml}
-    </select>
-  `;
-
-  const select = document.getElementById("adminSecteurSelect");
-  select.value = adminSecteurFilter;
-
-  select.onchange = () => {
-    adminSecteurFilter = select.value;
-    renderMarkers();
-    renderList();
-    renderSecteurCount();
-  };
-}
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
   return !!(t && t.etat && String(t.etat).trim() !== "");
@@ -358,9 +252,7 @@ await loadTreesFromSheets();
 
 
 
-  
-  showAdminSecteurDropdown();
-} catch (e) {
+  } catch (e) {
     console.error("❌ Sync Google Sheets échouée", e);
   }
 }
@@ -842,7 +734,7 @@ async function readFilesAsDataUrls(files) {
 
     if (!list || !count) return;
 
-    const filtered = getVisibleTrees().filter((t) => treeMatchesQuery(t, q));
+    const filtered = trees.filter((t) => treeMatchesQuery(t, q));
 
     count.textContent = `${filtered.length} / ${trees.length}`;
     list.innerHTML = "";
@@ -926,7 +818,7 @@ async function readFilesAsDataUrls(files) {
     if (!container) return;
 
     const counts = {};
-    for (const t of getVisibleTrees()) {
+    for (const t of trees) {
       const s = t.secteur || "Non défini";
       counts[s] = (counts[s] || 0) + 1;
     }
@@ -1071,7 +963,7 @@ function addOrUpdateMarker(t) {
   function renderMarkers() {
     for (const m of markers.values()) map.removeLayer(m);
     markers.clear();
-    for (const t of getVisibleTrees()) addOrUpdateMarker(t);
+    for (const t of trees) addOrUpdateMarker(t);
   }
 
   function getQuartierFromLatLng(lat, lng) {
@@ -1616,9 +1508,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function startApp() {
-  
-  showUserDebugBadge();
-// si Leaflet pas chargé => stop clair
+  // si Leaflet pas chargé => stop clair
   if (typeof L === "undefined") {
     console.error("Leaflet (L) n'est pas chargé.");
     alert("Leaflet ne s'est pas chargé. Vérifie la connexion / scripts.");
