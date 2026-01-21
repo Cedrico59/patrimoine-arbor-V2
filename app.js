@@ -110,21 +110,26 @@ async function postToGAS(payload) {
     throw new Error("Non authentifié");
   }
 
- const params = new URLSearchParams();
-params.append("action", "login");
-params.append("login", login);
-params.append("password", pwd);
+  const params = new URLSearchParams();
+  params.append("token", authToken);
 
-console.log("✅ DEBUG LOGIN - envoi (form) :", Object.fromEntries(params.entries()));
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    params.append(
+      key,
+      typeof value === "object" ? JSON.stringify(value) : String(value)
+    );
+  });
 
-const res = await fetch(API_URL, {
-  method: "POST",
-  body: params
-});
+  const res = await fetch(API_URL, { method: "POST", body: params });
+  const text = await res.text();
 
-const data = await res.json();
-console.log("✅ DEBUG LOGIN - réponse Apps Script :", data);
-
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, raw: text };
+  }
+}
 
 
 
@@ -1361,25 +1366,6 @@ if (selectedId) {
         updatedAt: Date.now(),
       };
 
-      //---------Tableau élagage---------------
-
-// dans l'objet t (tree)
-t.travaux = [
-  {
-    id: crypto.randomUUID(),
-    dateDemande: "",
-    natureTravaux: "",
-    dateDemandeDevis: "",
-    devisNumero: "",
-    montantDevis: "",
-    dateExecution: "",
-    remarques: "",
-    numeroBDC: "",
-    numeroFacture: ""
-  }
-];
-
-
       await syncToSheets(t);
 
       trees.unshift(t);
@@ -1579,6 +1565,7 @@ function getColorFromEtat(etat) {
 }
 
 document.getElementById("loginBtn")?.addEventListener("click", async () => {
+  const login = document.getElementById("loginSelect").value; // ✅ AJOUT
   const pwd = document.getElementById("passwordInput").value;
   const err = document.getElementById("loginError");
 
@@ -1589,7 +1576,8 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
       method: "POST",
       body: new URLSearchParams({
         action: "login",
-        password: pwd
+        login: login,        // ✅ AJOUT
+        password: pwd        // ✅ OK
       })
     });
 
@@ -1602,11 +1590,14 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 
     authToken = data.token;
     sessionStorage.setItem("authToken", authToken);
+
+    // ✅ bonus : stocker infos user
+    sessionStorage.setItem("userRole", data.role || "");
+    sessionStorage.setItem("userSecteur", data.secteur || "");
+
     isAuthenticated = true;
 
-    // Affiche le bouton Déconnexion
     updateLogoutButtonVisibility();
-
     document.getElementById("loginOverlay").style.display = "none";
     startApp();
 
@@ -1615,40 +1606,28 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
   }
 });
 
+
 // Bouton Déconnexion
 document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
 
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("loginBtn");
-  if (!btn) {
-    console.error("❌ DEBUG LOGIN: bouton #loginBtn introuvable");
-    return;
+//---------Tableau élagage---------------
+
+// dans l'objet t (tree)
+t.travaux = [
+  {
+    id: crypto.randomUUID(),
+    dateDemande: "",
+    natureTravaux: "",
+    dateDemandeDevis: "",
+    devisNumero: "",
+    montantDevis: "",
+    dateExecution: "",
+    remarques: "",
+    numeroBDC: "",
+    numeroFacture: ""
   }
-
-  btn.addEventListener("click", async () => {
-    try {
-      const login = document.getElementById("loginUser")?.value || "admin";
-      const pwd = document.getElementById("loginPass")?.value || "";
-
-      const payload = { action: "login", login, password: pwd };
-      console.log("✅ DEBUG LOGIN - envoi :", payload);
-
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      console.log("✅ DEBUG LOGIN - réponse Apps Script :", data);
-
-      // IMPORTANT : si ok, on laisse ton code normal continuer
-    } catch (e) {
-      console.error("❌ DEBUG LOGIN - erreur fetch :", e);
-    }
-  });
-});
+];
 
 
 })();
