@@ -1520,6 +1520,7 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
+  updateDeleteButtonVisibility(null);
   applyTravauxLock();
 
   await loadQuartiersGeoJSON();
@@ -1537,6 +1538,7 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
+  updateDeleteButtonVisibility(null);
   applyTravauxLock();
   await loadQuartiersGeoJSON();
   await loadCityContourAndLock();
