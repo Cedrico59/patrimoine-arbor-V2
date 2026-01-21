@@ -27,9 +27,9 @@
   let cityLayer = null;
 
   let trees = [];
-  
-let adminSecteurFilter = "__ALL__";
-let selectedId = null;
+
+  let adminSecteurFilter = "__ALL__";
+  let selectedId = null;
   let lastDeletedTree = null;
   let pendingPhotos = [];
 let authToken = sessionStorage.getItem("authToken");
@@ -49,6 +49,7 @@ function logout() {
   sessionStorage.removeItem("userSecteur");
 
   
+
   const badge = document.getElementById("userDebugBadge");
   if (badge) badge.remove();
   const adminBox = document.getElementById("adminSecteurBox");
@@ -77,6 +78,103 @@ function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
 
+
+// =========================
+// 👁️ VISIBILITÉ PAR SECTEUR (Admin: tout, Utilisateur: son secteur)
+// =========================
+function _normSecteur(v) {
+  return (v || "").toString().trim().toLowerCase();
+}
+
+function getVisibleTrees() {
+  const role = (sessionStorage.getItem("userRole") || "").toLowerCase();
+  const userSecteur = _normSecteur(sessionStorage.getItem("userSecteur") || "");
+
+  if (role === "admin") {
+    if (adminSecteurFilter === "__ALL__") return trees;
+    return trees.filter((t) => _normSecteur(t.secteur) === _normSecteur(adminSecteurFilter));
+  }
+
+  return trees.filter((t) => _normSecteur(t.secteur) === userSecteur);
+}
+
+function showUserDebugBadge() {
+  const userRole = (sessionStorage.getItem("userRole") || "").toLowerCase();
+  const userSecteur = (sessionStorage.getItem("userSecteur") || "").trim();
+  if (!userRole) return;
+
+  let badge = document.getElementById("userDebugBadge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "userDebugBadge";
+    badge.style.position = "fixed";
+    badge.style.top = "10px";
+    badge.style.right = "10px";
+    badge.style.zIndex = "9999";
+    badge.style.background = "rgba(0,0,0,0.75)";
+    badge.style.color = "white";
+    badge.style.padding = "8px 12px";
+    badge.style.borderRadius = "8px";
+    badge.style.fontSize = "13px";
+    badge.style.fontFamily = "Arial, sans-serif";
+    badge.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
+    document.body.appendChild(badge);
+  }
+
+  badge.innerHTML = `
+    <div><b>Rôle :</b> ${userRole}</div>
+    <div><b>Secteur :</b> ${userSecteur || "-"}</div>
+  `;
+}
+
+function showAdminSecteurDropdown() {
+  const role = (sessionStorage.getItem("userRole") || "").toLowerCase();
+  if (role !== "admin") return;
+
+  let box = document.getElementById("adminSecteurBox");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "adminSecteurBox";
+    box.style.position = "fixed";
+    box.style.top = "10px";
+    box.style.right = "10px";
+    box.style.zIndex = "9999";
+    box.style.background = "rgba(255,255,255,0.95)";
+    box.style.color = "#111";
+    box.style.padding = "10px 12px";
+    box.style.borderRadius = "10px";
+    box.style.fontSize = "13px";
+    box.style.fontFamily = "Arial, sans-serif";
+    box.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
+    document.body.appendChild(box);
+  }
+
+  // liste unique des secteurs existants
+  const secteurs = [...new Set(trees.map(t => (t.secteur || "").toString().trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+
+  const optionsHtml = [
+    `<option value="__ALL__">Tous les secteurs</option>`,
+    ...secteurs.map(s => `<option value="${s}">${s}</option>`)
+  ].join("");
+
+  box.innerHTML = `
+    <div style="margin-bottom:6px;"><b>Filtre secteur (Admin)</b></div>
+    <select id="adminSecteurSelect" style="width:180px; padding:6px; border-radius:8px;">
+      ${optionsHtml}
+    </select>
+  `;
+
+  const select = document.getElementById("adminSecteurSelect");
+  select.value = adminSecteurFilter;
+
+  select.onchange = () => {
+    adminSecteurFilter = select.value;
+    renderMarkers();
+    renderList();
+    renderSecteurCount();
+  };
+}
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
   return !!(t && t.etat && String(t.etat).trim() !== "");
@@ -260,7 +358,9 @@ await loadTreesFromSheets();
 
 
 
-  } catch (e) {
+  
+  showAdminSecteurDropdown();
+} catch (e) {
     console.error("❌ Sync Google Sheets échouée", e);
   }
 }
@@ -742,8 +842,7 @@ async function readFilesAsDataUrls(files) {
 
     if (!list || !count) return;
 
-    const visibleTrees = getVisibleTrees();
-  const filtered = visibleTrees.filter((t) => treeMatchesQuery(t, q));
+    const filtered = getVisibleTrees().filter((t) => treeMatchesQuery(t, q));
 
     count.textContent = `${filtered.length} / ${trees.length}`;
     list.innerHTML = "";
@@ -969,26 +1068,127 @@ function addOrUpdateMarker(t) {
     }
   }
 
-  function getVisibleTrees() {
-  const userRole = (sessionStorage.getItem("userRole") || "").toLowerCase();
-  const userSecteur = (sessionStorage.getItem("userSecteur") || "").trim();
-
-  // ADMIN : tout visible, sauf si filtré via dropdown
-  if (userRole === "admin") {
-    if (adminSecteurFilter === "__ALL__") return trees;
-    return trees.filter((t) => (t.secteur || "").trim() === adminSecteurFilter);
+  function renderMarkers() {
+    for (const m of markers.values()) map.removeLayer(m);
+    markers.clear();
+    for (const t of getVisibleTrees()) addOrUpdateMarker(t);
   }
 
-  // Utilisateur secteur : uniquement son secteur
-  return trees.filter((t) => (t.secteur || "").trim() === userSecteur);
-}
+  function getQuartierFromLatLng(lat, lng) {
+    if (!quartiersLayer) return "Inconnu";
+    if (typeof leafletPip === "undefined") return "Inconnu";
 
-function renderMarkers() {
-  for (const m of markers.values()) map.removeLayer(m);
-  markers.clear();
+    const layers = leafletPip.pointInLayer([lng, lat], quartiersLayer);
+    if (layers.length > 0) {
+      return layers[0].feature?.properties?.name || "Inconnu";
+    }
+    return "Inconnu";
+  }
 
-  const visibleTrees = getVisibleTrees();
-  for (const t of visibleTrees) addOrUpdateMarker(t);
+  async function loadQuartiersGeoJSON() {
+    try {
+      const res = await fetch("quartiers-marcq.geojson");
+      if (!res.ok) throw new Error("quartiers-marcq.geojson introuvable");
+      const geojson = await res.json();
+
+      quartiersLayer = L.geoJSON(geojson, {
+        style: (feature) => {
+          const nom = feature?.properties?.name || "Inconnu";
+          return {
+            color: getQuartierColor(nom),
+            weight: 2,
+            fillColor: getQuartierColor(nom),
+            fillOpacity: 0.25,
+          };
+        },
+        onEachFeature: (feature, layer) => {
+          const nom = feature?.properties?.name || "Quartier";
+          layer.bindPopup(`<b>${escapeHtml(nom)}</b>`);
+        },
+      }).addTo(map);
+    } catch (err) {
+      console.warn("Erreur chargement quartiers", err);
+    }
+  }
+
+  async function loadCityContourAndLock() {
+    try {
+      const url = "https://geo.api.gouv.fr/communes/59378?format=geojson&geometry=contour";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("API geo.api.gouv.fr indisponible");
+      const geojson = await res.json();
+
+      cityLayer = L.geoJSON(geojson, {
+        style: {
+          color: "#00ffff",
+          weight: 4,
+          opacity: 1,
+          fillColor: "#00ffff",
+          fillOpacity: 0.15,
+        },
+      }).addTo(map);
+
+      const bounds = cityLayer.getBounds();
+      if (bounds && bounds.isValid && bounds.isValid()) {
+        map.fitBounds(bounds);
+        map.setMaxBounds(bounds);
+        map.options.maxBoundsViscosity = 1.0;
+      }
+    } catch (err) {
+      console.warn("Erreur chargement contour commune", err);
+    }
+  }
+// =========================
+// 📍 GEOLOCALISATION GPS
+// =========================
+function locateUserGPS() {
+
+  if (!navigator.geolocation) {
+    alert("La géolocalisation n’est pas supportée sur cet appareil.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      // 🗺️ centre la carte
+      map.setView([lat, lng], 17);
+
+      // ✏️ prépare une nouvelle fiche
+      selectedId = null;
+      deleteBtn().disabled = true;
+
+      editorTitle().textContent = "Ajouter un arbre (GPS)";
+      editorHint().textContent = "Position GPS détectée automatiquement.";
+
+      clearForm(false);
+      latEl().value = fmtCoord(lat);
+      lngEl().value = fmtCoord(lng);
+
+      renderTreePreview(null);
+      highlightListSelection();
+
+      // 📍 marqueur temporaire
+      L.circleMarker([lat, lng], {
+        radius: 8,
+        color: "#00e5ff",
+        fillColor: "#00e5ff",
+        fillOpacity: 0.9
+      }).addTo(map);
+
+    },
+    (err) => {
+      alert("Impossible d’obtenir la position GPS.");
+      console.error(err);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
 }
 
   // =========================
@@ -1416,7 +1616,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function startApp() {
-  // si Leaflet pas chargé => stop clair
+  
+  showUserDebugBadge();
+// si Leaflet pas chargé => stop clair
   if (typeof L === "undefined") {
     console.error("Leaflet (L) n'est pas chargé.");
     alert("Leaflet ne s'est pas chargé. Vérifie la connexion / scripts.");
