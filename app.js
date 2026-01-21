@@ -110,26 +110,21 @@ async function postToGAS(payload) {
     throw new Error("Non authentifié");
   }
 
-  const params = new URLSearchParams();
-  params.append("token", authToken);
+ const params = new URLSearchParams();
+params.append("action", "login");
+params.append("login", login);
+params.append("password", pwd);
 
-  Object.entries(payload || {}).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    params.append(
-      key,
-      typeof value === "object" ? JSON.stringify(value) : String(value)
-    );
-  });
+console.log("✅ DEBUG LOGIN - envoi (form) :", Object.fromEntries(params.entries()));
 
-  const res = await fetch(API_URL, { method: "POST", body: params });
-  const text = await res.text();
+const res = await fetch(API_URL, {
+  method: "POST",
+  body: params
+});
 
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { ok: false, raw: text };
-  }
-}
+const data = await res.json();
+console.log("✅ DEBUG LOGIN - réponse Apps Script :", data);
+
 
 
 
