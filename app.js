@@ -65,22 +65,23 @@ let isAuthenticated = !!authToken;
 // =========================
 // 🔒 DROITS: verrouillage Travaux (sauf admin)
 // =========================
-function getCurrentUserId(){
-  return sessionStorage.getItem("userSecteur") || "";
+function isAdmin() {
+  return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
 
-function canDeleteTree(t){
-  if (isAdmin()) return true;
-  const me = getCurrentUserId();
-  if (!me) return false;
-  const owner = t.createdBy || t.posePar || t.auteur || "";
-  return String(owner).toLowerCase() === String(me).toLowerCase();
+function getCurrentUserSecteur(){
+  return (sessionStorage.getItem("userSecteur") || "").toLowerCase();
+}
+
+function getTreeOwnerSecteur(t){
+  return String(t?.createdBy || t?.posePar || t?.auteur || t?.ownerSecteur || "").toLowerCase();
 }
 
 function updateDeleteButtonState(tree){
   const btn = document.getElementById("deleteBtn");
   if(!btn) return;
 
+  // admin => toujours actif
   if (isAdmin()) {
     btn.disabled = false;
     btn.title = "";
@@ -89,21 +90,22 @@ function updateDeleteButtonState(tree){
     return;
   }
 
-  if (tree && canDeleteTree(tree)) {
+  const me = getCurrentUserSecteur();
+  const owner = getTreeOwnerSecteur(tree);
+
+  if (tree && me && owner && owner === me) {
     btn.disabled = false;
     btn.title = "";
     btn.style.opacity = "";
     btn.style.cursor = "";
   } else {
     btn.disabled = true;
-    btn.title = "⛔ Suppression réservée au poseur de l’arbre";
+    btn.title = "⛔ Suppression réservée au secteur poseur";
     btn.style.opacity = "0.45";
     btn.style.cursor = "not-allowed";
   }
 }
-function isAdmin() {
-  return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
-}
+
 
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
@@ -1311,6 +1313,7 @@ if (toggleListBtn && treeListWrapper) {
     };
 
  deleteBtn().onclick = async () => {
+  if (deleteBtn().disabled) return;
   if (!selectedId) return;
   if (!confirm("Supprimer cet arbre ?")) return;
 
@@ -1459,7 +1462,6 @@ if (selectedId) {
         photos,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        createdBy: sessionStorage.getItem('userSecteur') || '' ,
       };
 
       await syncToSheets(t);
