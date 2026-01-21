@@ -78,6 +78,7 @@ function applyTravauxLock() {
     "remarquesTravaux",
     "numeroBDC",
     "numeroFacture",
+    "comment",
   ];
 
   const locked = !isAdmin();
@@ -1670,7 +1671,8 @@ t.travaux = [
     dateExecution: "",
     remarques: "",
     numeroBDC: "",
-    numeroFacture: ""
+    numeroFacture: "",
+    comment:""
   }
 ];
 
