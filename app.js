@@ -1624,6 +1624,36 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
 
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("loginBtn");
+  if (!btn) {
+    console.error("❌ DEBUG LOGIN: bouton #loginBtn introuvable");
+    return;
+  }
+
+  btn.addEventListener("click", async () => {
+    try {
+      const login = document.getElementById("loginUser")?.value || "admin";
+      const pwd = document.getElementById("loginPass")?.value || "";
+
+      const payload = { action: "login", login, password: pwd };
+      console.log("✅ DEBUG LOGIN - envoi :", payload);
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      console.log("✅ DEBUG LOGIN - réponse Apps Script :", data);
+
+      // IMPORTANT : si ok, on laisse ton code normal continuer
+    } catch (e) {
+      console.error("❌ DEBUG LOGIN - erreur fetch :", e);
+    }
+  });
+});
 
 
 })();
