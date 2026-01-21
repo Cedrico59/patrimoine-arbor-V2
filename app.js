@@ -58,6 +58,49 @@ function logout() {
 let isAuthenticated = !!authToken;
 
 
+// =========================
+// 🔒 DROITS: verrouillage Travaux (sauf admin)
+// =========================
+function isAdmin() {
+  return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
+}
+
+function applyTravauxLock() {
+  // champs à bloquer pour tous sauf admin
+  const ids = [
+    "etat",
+    "dateDemande",
+    "natureTravaux",
+    "dateDemandeDevis",
+    "devisNumero",
+    "montantDevis",
+    "dateExecution",
+    "remarquesTravaux",
+    "numeroBDC",
+    "numeroFacture",
+  ];
+
+  const locked = !isAdmin();
+
+  ids.forEach((id) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+
+    node.disabled = locked;
+    node.readOnly = locked;
+
+    // petit feedback visuel uniquement sur ces champs
+    if (locked) {
+      node.style.opacity = "0.55";
+      node.style.cursor = "not-allowed";
+    } else {
+      node.style.opacity = "";
+      node.style.cursor = "";
+    }
+  });
+}
+
+
   const markers = new Map(); // id -> marker
 
   // =========================
@@ -1462,6 +1505,7 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
+  applyTravauxLock();
 
   await loadQuartiersGeoJSON();
   await loadCityContourAndLock();
@@ -1478,6 +1522,7 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
+  applyTravauxLock();
   await loadQuartiersGeoJSON();
   await loadCityContourAndLock();
   renderMarkers();
