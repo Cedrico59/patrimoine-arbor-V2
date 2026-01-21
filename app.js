@@ -1422,7 +1422,6 @@ if (selectedId) {
         photos,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        createdBy: sessionStorage.getItem('userSecteur') || '',
       };
 
       await syncToSheets(t);
@@ -1697,101 +1696,3 @@ t.travaux = [
     
 
 
-
-// =========================
-// 🔒 DROITS SUPPRESSION (secteur = uniquement ses arbres) - ULTRA
-// =========================
-function __userSecteur(){
-  return (sessionStorage.getItem("userSecteur") || "").toLowerCase();
-}
-function __isAdmin(){
-  return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
-}
-function __ownerSecteur(tree){
-  return String(tree?.createdBy || tree?.posePar || tree?.auteur || tree?.ownerSecteur || "").toLowerCase();
-}
-function __getSelectedTreeIdFromUI(){
-  // essaie plusieurs champs possibles dans la fiche
-  const el =
-    document.getElementById("treeId") ||
-    document.getElementById("selectedTreeId") ||
-    document.getElementById("idArbre") ||
-    document.querySelector("[data-selected-tree-id]") ||
-    document.querySelector("input[name='treeId']") ||
-    null;
-
-  if (!el) return null;
-  if (el.getAttribute && el.getAttribute("data-selected-tree-id")) return el.getAttribute("data-selected-tree-id");
-  return (el.value || el.textContent || "").trim() || null;
-}
-function __getSelectedTree(){
-  // 1) si l'app expose une variable globale
-  if (window.selectedTree) return window.selectedTree;
-  if (window.currentTree) return window.currentTree;
-
-  // 2) sinon, retrouve via id
-  const id = __getSelectedTreeIdFromUI();
-  if (!id) return null;
-
-  if (typeof trees !== "undefined" && Array.isArray(trees)) {
-    return trees.find(t => String(t.id) === String(id)) || null;
-  }
-  return null;
-}
-
-function __canDeleteCurrent(){
-  if (__isAdmin()) return true;
-  const t = __getSelectedTree();
-  const me = __userSecteur();
-  if (!t || !me) return false;
-  const owner = __ownerSecteur(t);
-  return !!owner && owner === me;
-}
-
-function __applyDeleteBtn(){
-  const btn = document.getElementById("deleteBtn") || document.getElementById("btnDelete") || document.querySelector(".btn-delete");
-  if (!btn) return;
-
-  if (__isAdmin()) {
-    btn.disabled = false;
-    btn.title = "";
-    btn.style.opacity = "";
-    btn.style.cursor = "";
-    return;
-  }
-
-  if (__canDeleteCurrent()) {
-    btn.disabled = false;
-    btn.title = "";
-    btn.style.opacity = "";
-    btn.style.cursor = "";
-  } else {
-    btn.disabled = true;
-    btn.title = "⛔ Suppression réservée au secteur poseur";
-    btn.style.opacity = "0.45";
-    btn.style.cursor = "not-allowed";
-  }
-}
-
-// bloque vraiment la suppression
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("#deleteBtn, #btnDelete, .btn-delete");
-  if (!btn) return;
-
-  __applyDeleteBtn();
-
-  if (btn.disabled) {
-    e.preventDefault();
-    e.stopPropagation();
-    alert("⛔ Suppression refusée : cet arbre n'a pas été posé par votre secteur.");
-    return false;
-  }
-}, true);
-
-// remet le bon état après chaque interaction qui change la sélection
-document.addEventListener("click", () => setTimeout(__applyDeleteBtn, 20), true);
-document.addEventListener("change", () => setTimeout(__applyDeleteBtn, 20), true);
-
-// au chargement
-setTimeout(__applyDeleteBtn, 300);
-setInterval(__applyDeleteBtn, 1500);
