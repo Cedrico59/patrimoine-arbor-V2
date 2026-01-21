@@ -27,7 +27,9 @@
   let cityLayer = null;
 
   let trees = [];
-  let selectedId = null;
+  
+let adminSecteurFilter = "__ALL__";
+let selectedId = null;
   let lastDeletedTree = null;
   let pendingPhotos = [];
 let authToken = sessionStorage.getItem("authToken");
@@ -46,7 +48,13 @@ function logout() {
   sessionStorage.removeItem("userRole");
   sessionStorage.removeItem("userSecteur");
 
-  authToken = null;
+  
+  const badge = document.getElementById("userDebugBadge");
+  if (badge) badge.remove();
+  const adminBox = document.getElementById("adminSecteurBox");
+  if (adminBox) adminBox.remove();
+  adminSecteurFilter = "__ALL__";
+authToken = null;
   isAuthenticated = false;
 
   // Retour écran de connexion
@@ -734,7 +742,8 @@ async function readFilesAsDataUrls(files) {
 
     if (!list || !count) return;
 
-    const filtered = trees.filter((t) => treeMatchesQuery(t, q));
+    const visibleTrees = getVisibleTrees();
+  const filtered = visibleTrees.filter((t) => treeMatchesQuery(t, q));
 
     count.textContent = `${filtered.length} / ${trees.length}`;
     list.innerHTML = "";
@@ -818,7 +827,7 @@ async function readFilesAsDataUrls(files) {
     if (!container) return;
 
     const counts = {};
-    for (const t of trees) {
+    for (const t of getVisibleTrees()) {
       const s = t.secteur || "Non défini";
       counts[s] = (counts[s] || 0) + 1;
     }
@@ -960,127 +969,26 @@ function addOrUpdateMarker(t) {
     }
   }
 
-  function renderMarkers() {
-    for (const m of markers.values()) map.removeLayer(m);
-    markers.clear();
-    for (const t of trees) addOrUpdateMarker(t);
+  function getVisibleTrees() {
+  const userRole = (sessionStorage.getItem("userRole") || "").toLowerCase();
+  const userSecteur = (sessionStorage.getItem("userSecteur") || "").trim();
+
+  // ADMIN : tout visible, sauf si filtré via dropdown
+  if (userRole === "admin") {
+    if (adminSecteurFilter === "__ALL__") return trees;
+    return trees.filter((t) => (t.secteur || "").trim() === adminSecteurFilter);
   }
 
-  function getQuartierFromLatLng(lat, lng) {
-    if (!quartiersLayer) return "Inconnu";
-    if (typeof leafletPip === "undefined") return "Inconnu";
+  // Utilisateur secteur : uniquement son secteur
+  return trees.filter((t) => (t.secteur || "").trim() === userSecteur);
+}
 
-    const layers = leafletPip.pointInLayer([lng, lat], quartiersLayer);
-    if (layers.length > 0) {
-      return layers[0].feature?.properties?.name || "Inconnu";
-    }
-    return "Inconnu";
-  }
+function renderMarkers() {
+  for (const m of markers.values()) map.removeLayer(m);
+  markers.clear();
 
-  async function loadQuartiersGeoJSON() {
-    try {
-      const res = await fetch("quartiers-marcq.geojson");
-      if (!res.ok) throw new Error("quartiers-marcq.geojson introuvable");
-      const geojson = await res.json();
-
-      quartiersLayer = L.geoJSON(geojson, {
-        style: (feature) => {
-          const nom = feature?.properties?.name || "Inconnu";
-          return {
-            color: getQuartierColor(nom),
-            weight: 2,
-            fillColor: getQuartierColor(nom),
-            fillOpacity: 0.25,
-          };
-        },
-        onEachFeature: (feature, layer) => {
-          const nom = feature?.properties?.name || "Quartier";
-          layer.bindPopup(`<b>${escapeHtml(nom)}</b>`);
-        },
-      }).addTo(map);
-    } catch (err) {
-      console.warn("Erreur chargement quartiers", err);
-    }
-  }
-
-  async function loadCityContourAndLock() {
-    try {
-      const url = "https://geo.api.gouv.fr/communes/59378?format=geojson&geometry=contour";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("API geo.api.gouv.fr indisponible");
-      const geojson = await res.json();
-
-      cityLayer = L.geoJSON(geojson, {
-        style: {
-          color: "#00ffff",
-          weight: 4,
-          opacity: 1,
-          fillColor: "#00ffff",
-          fillOpacity: 0.15,
-        },
-      }).addTo(map);
-
-      const bounds = cityLayer.getBounds();
-      if (bounds && bounds.isValid && bounds.isValid()) {
-        map.fitBounds(bounds);
-        map.setMaxBounds(bounds);
-        map.options.maxBoundsViscosity = 1.0;
-      }
-    } catch (err) {
-      console.warn("Erreur chargement contour commune", err);
-    }
-  }
-// =========================
-// 📍 GEOLOCALISATION GPS
-// =========================
-function locateUserGPS() {
-
-  if (!navigator.geolocation) {
-    alert("La géolocalisation n’est pas supportée sur cet appareil.");
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
-      // 🗺️ centre la carte
-      map.setView([lat, lng], 17);
-
-      // ✏️ prépare une nouvelle fiche
-      selectedId = null;
-      deleteBtn().disabled = true;
-
-      editorTitle().textContent = "Ajouter un arbre (GPS)";
-      editorHint().textContent = "Position GPS détectée automatiquement.";
-
-      clearForm(false);
-      latEl().value = fmtCoord(lat);
-      lngEl().value = fmtCoord(lng);
-
-      renderTreePreview(null);
-      highlightListSelection();
-
-      // 📍 marqueur temporaire
-      L.circleMarker([lat, lng], {
-        radius: 8,
-        color: "#00e5ff",
-        fillColor: "#00e5ff",
-        fillOpacity: 0.9
-      }).addTo(map);
-
-    },
-    (err) => {
-      alert("Impossible d’obtenir la position GPS.");
-      console.error(err);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
+  const visibleTrees = getVisibleTrees();
+  for (const t of visibleTrees) addOrUpdateMarker(t);
 }
 
   // =========================
@@ -1694,5 +1602,4 @@ t.travaux = [
 })();
 
     
-
 
