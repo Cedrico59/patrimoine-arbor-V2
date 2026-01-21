@@ -69,44 +69,6 @@ function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
 
-function getCurrentUserSecteur(){
-  return (sessionStorage.getItem("userSecteur") || "").toLowerCase();
-}
-
-function getTreeOwnerSecteur(t){
-  return String(t?.createdBy || t?.posePar || t?.auteur || t?.ownerSecteur || "").toLowerCase();
-}
-
-function updateDeleteButtonState(tree){
-  const btn = document.getElementById("deleteBtn");
-  if(!btn) return;
-
-  // admin => toujours actif
-  if (isAdmin()) {
-    btn.disabled = false;
-    btn.title = "";
-    btn.style.opacity = "";
-    btn.style.cursor = "";
-    return;
-  }
-
-  const me = getCurrentUserSecteur();
-  const owner = getTreeOwnerSecteur(tree);
-
-  if (tree && me && owner && owner === me) {
-    btn.disabled = false;
-    btn.title = "";
-    btn.style.opacity = "";
-    btn.style.cursor = "";
-  } else {
-    btn.disabled = true;
-    btn.title = "⛔ Suppression réservée au secteur poseur";
-    btn.style.opacity = "0.45";
-    btn.style.cursor = "not-allowed";
-  }
-}
-
-
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
   return !!(t && t.etat && String(t.etat).trim() !== "");
@@ -908,7 +870,6 @@ pendingPhotos = [];
 
     selectedId = id;
     const t = id ? getTreeById(id) : null;
-    updateDeleteButtonState(t);
 
     if (!t) {
       editorTitle().textContent = "Ajouter un arbre";
@@ -1313,7 +1274,6 @@ if (toggleListBtn && treeListWrapper) {
     };
 
  deleteBtn().onclick = async () => {
-  if (deleteBtn().disabled) return;
   if (!selectedId) return;
   if (!confirm("Supprimer cet arbre ?")) return;
 
@@ -1462,6 +1422,7 @@ if (selectedId) {
         photos,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        createdBy: sessionStorage.getItem('userSecteur') || '',
       };
 
       await syncToSheets(t);
@@ -1735,3 +1696,71 @@ t.travaux = [
 
     
 
+
+
+// =========================
+// 🔒 DROITS SUPPRESSION (secteur = uniquement ses arbres)
+// =========================
+function __getSecteurUser(){
+  return (sessionStorage.getItem("userSecteur") || "").toLowerCase();
+}
+function __getOwnerSecteur(tree){
+  return String(tree?.createdBy || tree?.posePar || tree?.auteur || tree?.ownerSecteur || "").toLowerCase();
+}
+function __isAdmin(){
+  return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
+}
+function __canDeleteSelectedTree(){
+  if (__isAdmin()) return true;
+  const me = __getSecteurUser();
+  const tree = window.selectedTree || window.currentTree || null;
+  if (!tree) return false;
+  const owner = __getOwnerSecteur(tree);
+  return !!me && !!owner && owner === me;
+}
+function __applyDeleteButtonRule(){
+  const btn = document.getElementById("deleteBtn") || document.getElementById("btnDelete") || document.querySelector(".btn-delete");
+  if(!btn) return;
+  if (__isAdmin()) {
+    btn.disabled = false;
+    btn.title = "";
+    btn.style.opacity = "";
+    btn.style.cursor = "";
+    return;
+  }
+  if (__canDeleteSelectedTree()) {
+    btn.disabled = false;
+    btn.title = "";
+    btn.style.opacity = "";
+    btn.style.cursor = "";
+  } else {
+    btn.disabled = true;
+    btn.title = "⛔ Suppression réservée au secteur poseur";
+    btn.style.opacity = "0.45";
+    btn.style.cursor = "not-allowed";
+  }
+}
+
+// Interception béton: bloque la suppression même si quelqu'un force le clic
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("#deleteBtn, #btnDelete, .btn-delete");
+  if(!btn) return;
+
+  __applyDeleteButtonRule();
+  if (btn.disabled) {
+    e.preventDefault();
+    e.stopPropagation();
+    alert("⛔ Suppression refusée : cet arbre n'a pas été posé par votre secteur.");
+  }
+}, true);
+
+// Dès qu'un arbre est sélectionné/affiché, on essaye de mettre à jour l'état du bouton
+document.addEventListener("click", (e) => {
+  // clic sur un item arbre (liste / carte)
+  const item = e.target.closest("[data-tree], [data-tree-id], .tree-item");
+  if (!item) return;
+  setTimeout(__applyDeleteButtonRule, 30);
+}, true);
+
+// et au démarrage
+setTimeout(__applyDeleteButtonRule, 300);
