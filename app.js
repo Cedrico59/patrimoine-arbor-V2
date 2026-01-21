@@ -65,6 +65,42 @@ let isAuthenticated = !!authToken;
 // =========================
 // 🔒 DROITS: verrouillage Travaux (sauf admin)
 // =========================
+function getCurrentUserId(){
+  return sessionStorage.getItem("userSecteur") || "";
+}
+
+function canDeleteTree(t){
+  if (isAdmin()) return true;
+  const me = getCurrentUserId();
+  if (!me) return false;
+  const owner = t.createdBy || t.posePar || t.auteur || "";
+  return String(owner).toLowerCase() === String(me).toLowerCase();
+}
+
+function updateDeleteButtonState(tree){
+  const btn = document.getElementById("deleteBtn");
+  if(!btn) return;
+
+  if (isAdmin()) {
+    btn.disabled = false;
+    btn.title = "";
+    btn.style.opacity = "";
+    btn.style.cursor = "";
+    return;
+  }
+
+  if (tree && canDeleteTree(tree)) {
+    btn.disabled = false;
+    btn.title = "";
+    btn.style.opacity = "";
+    btn.style.cursor = "";
+  } else {
+    btn.disabled = true;
+    btn.title = "⛔ Suppression réservée au poseur de l’arbre";
+    btn.style.opacity = "0.45";
+    btn.style.cursor = "not-allowed";
+  }
+}
 function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
@@ -870,6 +906,7 @@ pendingPhotos = [];
 
     selectedId = id;
     const t = id ? getTreeById(id) : null;
+    updateDeleteButtonState(t);
 
     if (!t) {
       editorTitle().textContent = "Ajouter un arbre";
@@ -913,8 +950,6 @@ pendingPhotos = [];
 if (t.photos && t.photos.length > 0) {
   renderGallery(t.photos);
   renderPhotoCarousel(t.photos);
-  try { updateDeleteButtonVisibility(window.selectedTree || window.currentTree || (typeof trees!=='undefined' ? trees.find(x=>x.id===id):null) || null); } catch(e) {}
-
 } else {
   document.getElementById("photoCarousel")?.classList.add("hidden");
 }
@@ -1424,6 +1459,7 @@ if (selectedId) {
         photos,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        createdBy: sessionStorage.getItem('userSecteur') || '' ,
       };
 
       await syncToSheets(t);
