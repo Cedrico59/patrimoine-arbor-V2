@@ -1605,4 +1605,23 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
 
+//---------Tableau élagage---------------
+
+// dans l'objet t (tree)
+t.travaux = [
+  {
+    id: crypto.randomUUID(),
+    dateDemande: "",
+    natureTravaux: "",
+    dateDemandeDevis: "",
+    devisNumero: "",
+    montantDevis: "",
+    dateExecution: "",
+    remarques: "",
+    numeroBDC: "",
+    numeroFacture: ""
+  }
+];
+
+
 })();
