@@ -54,6 +54,10 @@ function logout() {
   if (overlay) overlay.style.display = "flex";
 
   updateLogoutButtonVisibility();
+
+  // 🔄 refresh complet après déconnexion (garanti)
+  setTimeout(() => window.location.reload(), 50);
+
 }
 let isAuthenticated = !!authToken;
 
@@ -1678,3 +1682,6 @@ t.travaux = [
 
 
 })();
+
+    
+
