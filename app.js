@@ -1699,28 +1699,59 @@ t.travaux = [
 
 
 // =========================
-// 🔒 DROITS SUPPRESSION (secteur = uniquement ses arbres)
+// 🔒 DROITS SUPPRESSION (secteur = uniquement ses arbres) - ULTRA
 // =========================
-function __getSecteurUser(){
+function __userSecteur(){
   return (sessionStorage.getItem("userSecteur") || "").toLowerCase();
-}
-function __getOwnerSecteur(tree){
-  return String(tree?.createdBy || tree?.posePar || tree?.auteur || tree?.ownerSecteur || "").toLowerCase();
 }
 function __isAdmin(){
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
-function __canDeleteSelectedTree(){
-  if (__isAdmin()) return true;
-  const me = __getSecteurUser();
-  const tree = window.selectedTree || window.currentTree || null;
-  if (!tree) return false;
-  const owner = __getOwnerSecteur(tree);
-  return !!me && !!owner && owner === me;
+function __ownerSecteur(tree){
+  return String(tree?.createdBy || tree?.posePar || tree?.auteur || tree?.ownerSecteur || "").toLowerCase();
 }
-function __applyDeleteButtonRule(){
+function __getSelectedTreeIdFromUI(){
+  // essaie plusieurs champs possibles dans la fiche
+  const el =
+    document.getElementById("treeId") ||
+    document.getElementById("selectedTreeId") ||
+    document.getElementById("idArbre") ||
+    document.querySelector("[data-selected-tree-id]") ||
+    document.querySelector("input[name='treeId']") ||
+    null;
+
+  if (!el) return null;
+  if (el.getAttribute && el.getAttribute("data-selected-tree-id")) return el.getAttribute("data-selected-tree-id");
+  return (el.value || el.textContent || "").trim() || null;
+}
+function __getSelectedTree(){
+  // 1) si l'app expose une variable globale
+  if (window.selectedTree) return window.selectedTree;
+  if (window.currentTree) return window.currentTree;
+
+  // 2) sinon, retrouve via id
+  const id = __getSelectedTreeIdFromUI();
+  if (!id) return null;
+
+  if (typeof trees !== "undefined" && Array.isArray(trees)) {
+    return trees.find(t => String(t.id) === String(id)) || null;
+  }
+  return null;
+}
+
+function __canDeleteCurrent(){
+  if (__isAdmin()) return true;
+  const t = __getSelectedTree();
+  const me = __userSecteur();
+  if (!t || !me) return false;
+  const owner = __ownerSecteur(t);
+  return !!owner && owner === me;
+}
+
+function __applyDeleteBtn(){
   const btn = document.getElementById("deleteBtn") || document.getElementById("btnDelete") || document.querySelector(".btn-delete");
-  if(!btn) return;
+  if (!btn) return;
+
   if (__isAdmin()) {
     btn.disabled = false;
     btn.title = "";
@@ -1728,7 +1759,8 @@ function __applyDeleteButtonRule(){
     btn.style.cursor = "";
     return;
   }
-  if (__canDeleteSelectedTree()) {
+
+  if (__canDeleteCurrent()) {
     btn.disabled = false;
     btn.title = "";
     btn.style.opacity = "";
@@ -1741,26 +1773,25 @@ function __applyDeleteButtonRule(){
   }
 }
 
-// Interception béton: bloque la suppression même si quelqu'un force le clic
+// bloque vraiment la suppression
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("#deleteBtn, #btnDelete, .btn-delete");
-  if(!btn) return;
+  if (!btn) return;
 
-  __applyDeleteButtonRule();
+  __applyDeleteBtn();
+
   if (btn.disabled) {
     e.preventDefault();
     e.stopPropagation();
     alert("⛔ Suppression refusée : cet arbre n'a pas été posé par votre secteur.");
+    return false;
   }
 }, true);
 
-// Dès qu'un arbre est sélectionné/affiché, on essaye de mettre à jour l'état du bouton
-document.addEventListener("click", (e) => {
-  // clic sur un item arbre (liste / carte)
-  const item = e.target.closest("[data-tree], [data-tree-id], .tree-item");
-  if (!item) return;
-  setTimeout(__applyDeleteButtonRule, 30);
-}, true);
+// remet le bon état après chaque interaction qui change la sélection
+document.addEventListener("click", () => setTimeout(__applyDeleteBtn, 20), true);
+document.addEventListener("change", () => setTimeout(__applyDeleteBtn, 20), true);
 
-// et au démarrage
-setTimeout(__applyDeleteButtonRule, 300);
+// au chargement
+setTimeout(__applyDeleteBtn, 300);
+setInterval(__applyDeleteBtn, 1500);
