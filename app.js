@@ -913,6 +913,8 @@ pendingPhotos = [];
 if (t.photos && t.photos.length > 0) {
   renderGallery(t.photos);
   renderPhotoCarousel(t.photos);
+  try { updateDeleteButtonVisibility(window.selectedTree || window.currentTree || (typeof trees!=='undefined' ? trees.find(x=>x.id===id):null) || null); } catch(e) {}
+
 } else {
   document.getElementById("photoCarousel")?.classList.add("hidden");
 }
@@ -1520,7 +1522,6 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
-  updateDeleteButtonVisibility(null);
   applyTravauxLock();
 
   await loadQuartiersGeoJSON();
@@ -1538,7 +1539,6 @@ async function startApp() {
   initMap();
   addLegendToMap();
   wireUI();
-  updateDeleteButtonVisibility(null);
   applyTravauxLock();
   await loadQuartiersGeoJSON();
   await loadCityContourAndLock();
