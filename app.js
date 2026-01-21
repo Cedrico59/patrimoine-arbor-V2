@@ -65,6 +65,56 @@ let isAuthenticated = !!authToken;
 // =========================
 // 🔒 DROITS: verrouillage Travaux (sauf admin)
 // =========================
+function treeHasPastille(tree) {
+  if (!tree) return false;
+  const v = tree.pastille ?? tree.hasPastille ?? tree.pastilleEtat ?? tree.pastilleSecteur ?? tree.badge ?? tree.pastilleColor;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") return v.trim() !== "" && v.toLowerCase() !== "non" && v.toLowerCase() !== "false";
+  return false;
+}
+
+function lockAllSectorsIfPastille(tree) {
+  if (isAdmin()) return;
+  const locked = treeHasPastille(tree);
+
+  const form = document.querySelector("#treeForm") || document.querySelector(".tree-form") || document;
+  const nodes = form.querySelectorAll("input, select, textarea");
+  nodes.forEach((el) => {
+    if (el.id && (el.id.includes("login") || el.id.includes("password"))) return;
+
+    if (el.id === "etat" && locked) {
+      el.value = "Aucun";
+    }
+
+    if (locked) {
+      el.disabled = true;
+      el.readOnly = true;
+      el.style.opacity = "0.55";
+      el.style.cursor = "not-allowed";
+    } else {
+      if (![
+        "etat",
+        "dateDemande",
+        "natureTravaux",
+        "dateDemandeDevis",
+        "devisNumero",
+        "montantDevis",
+        "dateExecution",
+        "remarquesTravaux",
+        "numeroBDC",
+        "numeroFacture",
+      ].includes(el.id)) {
+        el.disabled = false;
+        el.readOnly = false;
+        el.style.opacity = "";
+        el.style.cursor = "";
+      }
+    }
+  });
+
+  applyTravauxLock();
+}
 function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
@@ -82,7 +132,7 @@ function applyTravauxLock() {
     "remarquesTravaux",
     "numeroBDC",
     "numeroFacture",
-    "comment",
+    "comment:",
   ];
 
   const locked = !isAdmin();
@@ -1683,5 +1733,18 @@ t.travaux = [
 
 })();
 
+// 🔒 Fallback: après clic sur un item arbre, appliquer le lock si pastille (non-admin)
+document.addEventListener("click", (e) => {
+  const item = e.target.closest("[data-tree], [data-tree-id], .tree-item");
+  if (!item) return;
+
+  const tree = window.selectedTree || window.currentTree || null;
+  if (!tree) return;
+
+  lockAllSectorsIfPastille(tree);
+});
+
+   
+ 
     
 
