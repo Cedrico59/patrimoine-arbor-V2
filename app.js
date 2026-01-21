@@ -1366,7 +1366,9 @@ if (selectedId) {
         updatedAt: Date.now(),
       };
 
-// ✅ Initialiser le tableau Travaux (Élagage/Abattage)
+      //---------Tableau élagage---------------
+
+// dans l'objet t (tree)
 t.travaux = [
   {
     id: crypto.randomUUID(),
@@ -1381,6 +1383,7 @@ t.travaux = [
     numeroFacture: ""
   }
 ];
+
 
       await syncToSheets(t);
 
