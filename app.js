@@ -31,30 +31,6 @@
   let lastDeletedTree = null;
   let pendingPhotos = [];
 let authToken = sessionStorage.getItem("authToken");
-
-// ------------------------------
-// 🔐 Déconnexion
-// ------------------------------
-function updateLogoutButtonVisibility() {
-  const btn = document.getElementById("logoutBtn");
-  if (!btn) return;
-  btn.style.display = authToken ? "inline-flex" : "none";
-}
-
-function logout() {
-  sessionStorage.removeItem("authToken");
-  sessionStorage.removeItem("userRole");
-  sessionStorage.removeItem("userSecteur");
-
-  authToken = null;
-  isAuthenticated = false;
-
-  // Retour écran de connexion
-  const overlay = document.getElementById("loginOverlay");
-  if (overlay) overlay.style.display = "flex";
-
-  updateLogoutButtonVisibility();
-}
 let isAuthenticated = !!authToken;
 
 
@@ -1565,7 +1541,6 @@ function getColorFromEtat(etat) {
 }
 
 document.getElementById("loginBtn")?.addEventListener("click", async () => {
-  const login = document.getElementById("loginSelect").value; // ✅ AJOUT
   const pwd = document.getElementById("passwordInput").value;
   const err = document.getElementById("loginError");
 
@@ -1576,8 +1551,7 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
       method: "POST",
       body: new URLSearchParams({
         action: "login",
-        login: login,        // ✅ AJOUT
-        password: pwd        // ✅ OK
+        password: pwd
       })
     });
 
@@ -1590,14 +1564,8 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 
     authToken = data.token;
     sessionStorage.setItem("authToken", authToken);
-
-    // ✅ bonus : stocker infos user
-    sessionStorage.setItem("userRole", data.role || "");
-    sessionStorage.setItem("userSecteur", data.secteur || "");
-
     isAuthenticated = true;
 
-    updateLogoutButtonVisibility();
     document.getElementById("loginOverlay").style.display = "none";
     startApp();
 
@@ -1605,10 +1573,6 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
     err.textContent = "Erreur de connexion";
   }
 });
-
-
-// Bouton Déconnexion
-document.getElementById("logoutBtn")?.addEventListener("click", logout);
 
 
 //---------Tableau élagage---------------
