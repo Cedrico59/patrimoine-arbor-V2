@@ -1676,9 +1676,9 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 
     // ✅ bonus : stocker infos user
     sessionStorage.setItem("userRole", data.role || "");
-    \1
-      lockSecteurField();
-isAuthenticated = true;
+    sessionStorage.setItem("userSecteur", data.secteur || "");
+
+    isAuthenticated = true;
 
     updateLogoutButtonVisibility();
     document.getElementById("loginOverlay").style.display = "none";
@@ -1721,27 +1721,32 @@ t.travaux = [
 
 
 // =========================
-// 🔒 VERROUILLAGE SECTEUR (FORMULAIRE)
+// SECTEUR LOCK (SAFE)
 // =========================
-function lockSecteurField() {
-  const secteurInput =
-    document.getElementById("secteur") ||
-    document.querySelector("[name='secteur']") ||
-    document.getElementById("treeSecteur");
+function findSecteurInput_() {
+  return document.getElementById("secteur")
+      || document.querySelector("[name='secteur']")
+      || document.getElementById("treeSecteur");
+}
 
-  if (!secteurInput) return;
+function lockSecteurFieldSafe_() {
+  const el = findSecteurInput_();
+  if (!el) return;
 
-  if (isAdmin()) {
-    secteurInput.disabled = false;
-    secteurInput.readOnly = false;
+  if (isAdmin && typeof isAdmin === "function" && isAdmin()) {
+    el.disabled = false;
+    el.readOnly = false;
     return;
   }
 
-  const userSecteur = getUserSecteur();
-  if (userSecteur) {
-    secteurInput.value = userSecteur;
-  }
-  secteurInput.disabled = true;
-  secteurInput.readOnly = true;
+  const s = (sessionStorage.getItem("userSecteur") || "").trim();
+  if (s) el.value = s;
+  el.disabled = true;
+  el.readOnly = true;
 }
+
+// call after DOM ready
+document.addEventListener("DOMContentLoaded", () => {
+  lockSecteurFieldSafe_();
+});
 
