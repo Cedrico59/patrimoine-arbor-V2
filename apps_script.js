@@ -6,6 +6,96 @@ function TEST_DRIVE_LINKED() {
 }
 
 /* =========================
+   📜 HISTORIQUE MODIFICATIONS (AJOUT)
+========================= */
+const SHEET_HISTORIQUE = "Historique";
+
+// crée l'onglet Historique s'il n'existe pas
+function getOrCreateHistorySheet_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sh = ss.getSheetByName(SHEET_HISTORIQUE);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_HISTORIQUE);
+    sh.appendRow([
+      "timestamp",
+      "login",
+      "role",
+      "secteurUser",
+      "action",
+      "treeId",
+      "details"
+    ]);
+  }
+  return sh;
+}
+
+// écrit une ligne d'historique
+function logHistory_(meta, action, treeId, detailsObj) {
+  try {
+    const hist = getOrCreateHistorySheet_();
+    hist.appendRow([
+      new Date(),
+      meta?.login || "",
+      meta?.role || "",
+      meta?.secteur || "",
+      action,
+      treeId || "",
+      JSON.stringify(detailsObj || {})
+    ]);
+  } catch (e) {
+    Logger.log("Historique erreur: " + e);
+  }
+}
+
+// récupère la ligne d’un arbre (avant modif) pour faire un diff
+function getTreeRowAsObject_(sheet, treeId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const values = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    if (String(row[1]).trim() === String(treeId).trim()) {
+      return {
+        _rowIndex: i + 2,
+        id: row[1],
+        lat: row[2],
+        lng: row[3],
+        species: row[4],
+        height: row[5],
+        dbh: row[6],
+        secteur: row[7],
+        address: row[8],
+        tags: row[9],
+        comment: row[10],
+        photos: row[11],
+        etat: row[12],
+        updatedAt: row[13]
+      };
+    }
+  }
+  return null;
+}
+
+// diff simple avant/après
+function diffObjects_(before, after) {
+  if (!before) return [{ field: "__NEW__", from: null, to: after?.id || "" }];
+
+  const keys = ["lat","lng","species","height","dbh","secteur","address","tags","comment","photos","etat"];
+  const changes = [];
+
+  keys.forEach(k => {
+    const a = before[k];
+    const b = after[k];
+    const sa = (a === null || a === undefined) ? "" : String(a);
+    const sb = (b === null || b === undefined) ? "" : String(b);
+    if (sa !== sb) changes.push({ field: k, from: a, to: b });
+  });
+
+  return changes;
+}
+
+/* =========================
    🔐 AUTH (AJOUT)
 ========================= */
 // =========================
@@ -129,10 +219,46 @@ function doGet(e) {
     .createTextOutput(JSON.stringify(trees))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
 // ===== LECTURE DES TRAVAUX =====
 function doGet(e) {
   const token = e?.parameter?.token;
   if (!isValidToken_(token)) return authFail_();
+
+  // 📜 HISTORIQUE : GET?action=history&id=XXX
+  if (e?.parameter?.action === "history") {
+    const treeId = String(e?.parameter?.id || "").trim();
+    const limit = Number(e?.parameter?.limit || 50);
+
+    if (!treeId) return jsonResponse({ ok: false, error: "id manquant" });
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const hist = ss.getSheetByName(SHEET_HISTORIQUE);
+    if (!hist) return jsonResponse({ ok: true, history: [] });
+
+    const last = hist.getLastRow();
+    if (last < 2) return jsonResponse({ ok: true, history: [] });
+
+    const rows = hist.getRange(2, 1, last - 1, hist.getLastColumn()).getValues();
+
+    const out = [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (String(rows[i][5]).trim() === treeId) {
+        out.push({
+          timestamp: rows[i][0],
+          login: rows[i][1],
+          role: rows[i][2],
+          secteurUser: rows[i][3],
+          action: rows[i][4],
+          treeId: rows[i][5],
+          details: rows[i][6]
+        });
+        if (out.length >= limit) break;
+      }
+    }
+
+    return jsonResponse({ ok: true, history: out });
+  }
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName("Patrimoine_arboré");
@@ -152,17 +278,17 @@ function doGet(e) {
         if (!treeId) return;
 
         travauxMap[treeId] = {
-  dateDemande: formatDateForInput(r[2]),
-  natureTravaux: r[3] || "",
-  dateDemandeDevis: formatDateForInput(r[6]),
-  devisNumero: r[7] || "",
-  montantDevis: r[8] || "",
-  dateExecution: formatDateForInput(r[9]),
-  remarquesTravaux: r[10] || "",
-  numeroBDC: r[11] || "",
-  numeroFacture: r[12] || ""
-};
-
+          secteur: r[2] || "",
+          dateDemande: formatDateForInput(r[3]),
+          natureTravaux: r[4] || "",
+          dateDemandeDevis: formatDateForInput(r[7]),
+          devisNumero: r[8] || "",
+          montantDevis: r[9] || "",
+          dateExecution: formatDateForInput(r[10]),
+          remarquesTravaux: r[11] || "",
+          numeroBDC: r[12] || "",
+          numeroFacture: r[13] || ""
+        };
       });
     }
   }
@@ -285,6 +411,9 @@ function doPost(e) {
     const token = e?.parameter?.token;
     if (!isValidToken_(token)) return authFail_();
 
+    // ✅ META (AJOUT) pour historique
+    const meta = getTokenMeta_(token); // {role, secteur, login}
+
     let data = {};
 
     // ✅ Accepte :
@@ -313,6 +442,12 @@ function doPost(e) {
       delete data.password;
     }
 
+    // 🔒 SÉCURITÉ SECTEUR (AJOUT) :
+    // un compte secteur ne peut enregistrer que dans son secteur
+    if (meta && meta.role === "secteur") {
+      data.secteur = meta.secteur || data.secteur || "";
+    }
+
     const sheet = SpreadsheetApp
       .openById(SPREADSHEET_ID)
       .getSheetByName("Patrimoine_arboré");
@@ -321,6 +456,12 @@ function doPost(e) {
 
     /* ===== SUPPRESSION PHOTO ===== */
     if (data.action === "deletePhoto" && data.photoDriveId && data.treeId) {
+
+      // ✅ HISTORIQUE (AJOUT)
+      logHistory_(meta, "DELETE_PHOTO", data.treeId, {
+        photoDriveId: data.photoDriveId
+      });
+
       const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
 
       for (let i = 0; i < rows.length; i++) {
@@ -356,12 +497,20 @@ function doPost(e) {
     if (data.action === "delete" && data.id) {
       if (lastRow < 2) return ok({ status: "NOT_FOUND" });
 
+      // ✅ HISTORIQUE (AJOUT)
+      const beforeObjDelete = getTreeRowAsObject_(sheet, data.id);
+      logHistory_(meta, "DELETE", data.id, {
+        deletedRow: beforeObjDelete || null
+      });
+
       const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
 
       for (let i = 0; i < rows.length; i++) {
         if (String(rows[i][1]).trim() === String(data.id).trim()) {
           deleteTreeFolder(String(data.id).trim());
           sheet.deleteRow(i + 2);
+          // ✅ tri après suppression
+          sortArbresSheet_(sheet);
           SpreadsheetApp.flush();
           return ok({ status: "DELETED" });
         }
@@ -382,6 +531,9 @@ function doPost(e) {
       try { data.photos = JSON.parse(data.photos); }
       catch { data.photos = []; }
     }
+
+    // ✅ HISTORIQUE (AJOUT) : état avant update/create
+    const beforeObj = getTreeRowAsObject_(sheet, data.id);
 
     /* ===== PHOTOS EXISTANTES ===== */
     let existingPhotos = [];
@@ -431,78 +583,130 @@ function doPost(e) {
 
     let isUpdate = false;
 
-/* ===== UPDATE ===== */
-if (lastRow > 1) {
-  const ids = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]).trim() === String(data.id).trim()) {
-      sheet.getRange(i + 2, 1, 1, rowData.length)
-        .setValues([rowData]);
+    /* ===== UPDATE ===== */
+    if (lastRow > 1) {
+      const ids = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]).trim() === String(data.id).trim()) {
+          sheet.getRange(i + 2, 1, 1, rowData.length)
+            .setValues([rowData]);
 
-      colorRowByEtat(sheet, i + 2, data.etat);
-      isUpdate = true;
-      break;
+          // ✅ tri après mise à jour
+          sortArbresSheet_(sheet);
+
+          colorRowByEtat(sheet, i + 2, data.etat);
+          recolorOneArbreById_(sheet, data.id);
+          isUpdate = true;
+          break;
+        }
+      }
     }
-  }
-}
-/* ===== TRAVAUX (Élagages / Abattages) ===== */
-const sheetTravaux = SpreadsheetApp
-  .openById(SPREADSHEET_ID)
-  .getSheetByName(SHEET_TRAVAUX);
 
-const travauxRow = [
-  data.id,
-  data.etat || "",
-  data.dateDemande || "",
-  data.natureTravaux || "",
-  data.address || "",
-  data.species || "",
-  data.dateDemandeDevis || "",
-  data.devisNumero || "",
-  data.montantDevis || "",
-  data.dateExecution || "",
-  data.remarquesTravaux || "",
-  data.numeroBDC || "",
-  data.numeroFacture || ""
-];
+    /* ===== TRAVAUX (Élagages / Abattages) =====
+       ✅ NE PAS AJOUTER si pas de pastille Etat
+    */
+    const etatArbre = String(data.etat || "").trim();
+    const ETATS_TRAVAUX = [
+      "Dangereux (A abattre)",
+      "A surveiller",
+      "A élaguer (URGENT)",
+      "A élaguer (Moyen)",
+      "A élaguer (Faible)"
+    ];
+    const doitAllerTravaux = ETATS_TRAVAUX.includes(etatArbre);
 
-const lastTravaux = sheetTravaux.getLastRow();
-let foundTravaux = false;
+    if (doitAllerTravaux) {
+      const sheetTravaux = SpreadsheetApp
+        .openById(SPREADSHEET_ID)
+        .getSheetByName(SHEET_TRAVAUX);
 
-if (lastTravaux > 1) {
-  const idsTravaux = sheetTravaux.getRange(2, 1, lastTravaux - 1, 1).getValues();
-  for (let i = 0; i < idsTravaux.length; i++) {
-    if (String(idsTravaux[i][0]).trim() === String(data.id).trim()) {
-      const rowIndex = i + 2;
+      const travauxRow = [
+        data.id,
+        etatArbre,
+        data.secteur || "",
+        data.dateDemande || "",
+        data.natureTravaux || "",
+        data.address || "",
+        data.species || "",
+        data.dateDemandeDevis || "",
+        data.devisNumero || "",
+        data.montantDevis || "",
+        data.dateExecution || "",
+        data.remarquesTravaux || "",
+        data.numeroBDC || "",
+        data.numeroFacture || ""
+      ];
 
-sheetTravaux
-  .getRange(rowIndex, 1, 1, travauxRow.length)
-  .setValues([travauxRow]);
+      const lastTravaux = sheetTravaux.getLastRow();
+      let foundTravaux = false;
 
-colorEtatTravaux(sheetTravaux, rowIndex, data.etat);
-foundTravaux = true;
-break;
+      if (lastTravaux > 1) {
+        const idsTravaux = sheetTravaux.getRange(2, 1, lastTravaux - 1, 1).getValues();
+        for (let i = 0; i < idsTravaux.length; i++) {
+          if (String(idsTravaux[i][0]).trim() === String(data.id).trim()) {
+            const rowIndex = i + 2;
 
+            sheetTravaux
+              .getRange(rowIndex, 1, 1, travauxRow.length)
+              .setValues([travauxRow]);
+
+            colorEtatTravaux(sheetTravaux, rowIndex, etatArbre);
+            // ✅ tri après mise à jour travaux
+            sortTravauxSheet_(sheetTravaux);
+            // ✅ recolor fiable par ID (après tri)
+            recolorOneTravauxById_(sheetTravaux, data.id);
+            foundTravaux = true;
+            break;
+          }
+        }
+      }
+
+      if (!foundTravaux) {
+        sheetTravaux.appendRow(travauxRow);
+        // ✅ tri après création travaux
+        sortTravauxSheet_(sheetTravaux);
+        // ✅ recolor fiable par ID (après tri)
+        recolorOneTravauxById_(sheetTravaux, data.id);
+        const newRow = sheetTravaux.getLastRow();
+        colorEtatTravaux(sheetTravaux, newRow, etatArbre);
+        recolorOneTravauxById_(sheetTravaux, data.id);
+      }
     }
-  }
-}
-
-if (!foundTravaux) {
- sheetTravaux.appendRow(travauxRow);
-const newRow = sheetTravaux.getLastRow();
-colorEtatTravaux(sheetTravaux, newRow, data.etat);
-
-}
-
 
     /* ===== CREATE ===== */
-    /* ===== CREATE ===== */
-if (!isUpdate) {
-  sheet.appendRow(rowData);
-  const newRow = sheet.getLastRow();
-  colorRowByEtat(sheet, newRow, data.etat);
-}
+    if (!isUpdate) {
+      sheet.appendRow(rowData);
+      // ✅ tri après création
+      sortArbresSheet_(sheet);
+      const newRow = sheet.getLastRow();
+      colorRowByEtat(sheet, newRow, data.etat);
+      recolorOneArbreById_(sheet, data.id);
+    }
+
     SpreadsheetApp.flush();
+
+    // ✅ HISTORIQUE (AJOUT) : état après + diff + log CREATE/UPDATE
+    const afterObj = {
+      id: data.id,
+      lat: data.lat || "",
+      lng: data.lng || "",
+      species: data.species || "",
+      height: data.height || "",
+      dbh: data.dbh || "",
+      secteur: data.secteur || "",
+      address: data.address || "",
+      tags: (data.tags || []).join(","),
+      comment: data.comment || "",
+      photos: JSON.stringify(allPhotos || []),
+      etat: data.etat || ""
+    };
+
+    const changes = diffObjects_(beforeObj, afterObj);
+
+    logHistory_(meta, isUpdate ? "UPDATE" : "CREATE", data.id, {
+      changes
+    });
+
     return ok({ status: "CREATED", photos: allPhotos });
 
   } catch (err) {
@@ -568,10 +772,11 @@ function colorRowByEtat(sheet, rowIndex, etat) {
     range.setBackground(null); // reset
   }
 }
+
 function colorEtatTravaux(sheet, rowIndex, etat) {
   let color = null;
 
-    if (etat === "Dangereux (A abattre)") color = "#f28b82"; // rouge clair
+  if (etat === "Dangereux (A abattre)") color = "#f28b82"; // rouge clair
   if (etat === "A surveiller")  color = "#fbbc04"; // orange clair
   if (etat === "A élaguer (URGENT)")  color = "#FFFF00"; // jaune
   if (etat === "A élaguer (Moyen)")  color = "#00FFFF"; // beuc lair
@@ -588,7 +793,6 @@ function colorEtatTravaux(sheet, rowIndex, etat) {
     cell.setFontWeight("normal");
   }
 }
-
 
 function jsonResponse(obj) {
   return ContentService
@@ -609,4 +813,146 @@ function formatDateForInput(d) {
   const dd = String(d.getDate()).padStart(2, "0");
 
   return `${yyyy}-${mm}-${dd}`;
+}
+
+
+// =========================
+// 📌 TRI AUTOMATIQUE FEUILLE ARBRES
+// Secteur (col 8) -> Adresse (col 9) -> Espèce (col 5)
+// =========================
+function sortArbresSheet_(sheet) {
+  try {
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 2) return;
+
+    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).sort([
+      { column: 8, ascending: true }, // secteur
+      { column: 9, ascending: true }, // adresse (rue)
+      { column: 5, ascending: true }  // espèce
+    ]);
+
+    // ✅ IMPORTANT : ré-appliquer couleurs après tri
+    
+  } catch (e) {
+    Logger.log("Tri arbres erreur: " + e);
+  }
+}
+
+
+
+// =========================
+// 📌 TRI AUTOMATIQUE FEUILLE TRAVAUX
+// Secteur (col 3) -> Etat (col 2) -> Date demande (col 4)
+// =========================
+function sortTravauxSheet_(sheetTravaux) {
+  // ✅ Désactivé pour éviter les effets de style (couleur qui se propage)
+  // Si tu veux le tri, on pourra le remettre avec une approche "rebuild range"
+  return;
+}
+
+
+
+// =========================
+// 🎨 RECOLOR TRAVAUX APRÈS TRI
+// =========================
+function recolorEtatTravauxColumn_(sheetTravaux) {
+  const lastRow = sheetTravaux.getLastRow();
+  if (lastRow < 2) return;
+
+  const etats = sheetTravaux.getRange(2, 2, lastRow - 1, 1).getValues(); // col B
+  for (let i = 0; i < etats.length; i++) {
+    const rowIndex = i + 2;
+    const etat = String(etats[i][0] || "").trim();
+    colorEtatTravaux(sheetTravaux, rowIndex, etat);
+  }
+}
+
+// =========================
+// 🎨 RECOLOR ARBRES APRÈS TRI
+// =========================
+function recolorArbresRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  // etat colonne 13
+  const etats = sheet.getRange(2, 13, lastRow - 1, 1).getValues();
+  for (let i = 0; i < etats.length; i++) {
+    const rowIndex = i + 2;
+    const etat = String(etats[i][0] || "").trim();
+    colorRowByEtat(sheet, rowIndex, etat);
+  }
+}
+
+
+// =========================
+// 🎯 COULEUR TRAVAUX PAR ID (FIABLE)
+// =========================
+function recolorTravauxById_(sheetTravaux) {
+  const lastRow = sheetTravaux.getLastRow();
+  if (lastRow < 2) return;
+
+  const rows = sheetTravaux.getRange(2, 1, lastRow - 1, 2).getValues(); // A,B
+  for (let i = 0; i < rows.length; i++) {
+    const rowIndex = i + 2;
+    const treeId = String(rows[i][0] || "").trim();
+    const etat = String(rows[i][1] || "").trim();
+    if (!treeId) continue;
+    colorEtatTravaux(sheetTravaux, rowIndex, etat);
+  }
+}
+
+// =========================
+// 🎯 COULEUR ARBRES PAR ID (FIABLE)
+// =========================
+function recolorArbresById_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const ids = sheet.getRange(2, 2, lastRow - 1, 1).getValues();  // col B
+  const etats = sheet.getRange(2, 13, lastRow - 1, 1).getValues(); // col 13
+
+  for (let i = 0; i < ids.length; i++) {
+    const rowIndex = i + 2;
+    const id = String(ids[i][0] || "").trim();
+    const etat = String(etats[i][0] || "").trim();
+    if (!id) continue;
+    colorRowByEtat(sheet, rowIndex, etat);
+  }
+}
+
+
+// =========================
+// 🎯 RECOLOR 1 ARBRE PAR ID
+// =========================
+function recolorOneArbreById_(sheet, treeId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const ids = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // col B = ID
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(treeId).trim()) {
+      const rowIndex = i + 2;
+      const etat = String(sheet.getRange(rowIndex, 13).getValue() || "").trim(); // col 13 = etat
+      colorRowByEtat(sheet, rowIndex, etat);
+      return;
+    }
+  }
+}
+
+// =========================
+// 🎯 RECOLOR 1 TRAVAUX PAR ID
+// =========================
+function recolorOneTravauxById_(sheetTravaux, treeId) {
+  const lastRow = sheetTravaux.getLastRow();
+  if (lastRow < 2) return;
+
+  const ids = sheetTravaux.getRange(2, 1, lastRow - 1, 1).getValues(); // col A = ID
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(treeId).trim()) {
+      const rowIndex = i + 2;
+      const etat = String(sheetTravaux.getRange(rowIndex, 2).getValue() || "").trim(); // col B = etat
+      colorEtatTravaux(sheetTravaux, rowIndex, etat);
+      return;
+    }
+  }
 }
