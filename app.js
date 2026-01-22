@@ -1720,32 +1720,56 @@ t.travaux = [
 
 
 
+});
+
+
+
+
 // =========================
-// SECTEUR LOCK (SAFE)
+// SECTEUR LOCK (ROBUSTE)
 // =========================
-function findSecteurInput_() {
-  return document.getElementById("secteur")
-      || document.querySelector("[name='secteur']")
-      || document.getElementById("treeSecteur");
+function findSecteurInputs_() {
+  const list = [];
+
+  const a = document.getElementById("secteur");
+  const b = document.getElementById("treeSecteur");
+  const c = document.querySelector("[name='secteur']");
+  if (a) list.push(a);
+  if (b) list.push(b);
+  if (c) list.push(c);
+
+  // fallback : tout champ dont id/name contient "secteur"
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    const id = (el.id || "").toLowerCase();
+    const nm = (el.name || "").toLowerCase();
+    if (id.includes("secteur") || nm.includes("secteur")) {
+      if (!list.includes(el)) list.push(el);
+    }
+  });
+
+  return list;
 }
 
 function lockSecteurFieldSafe_() {
-  const el = findSecteurInput_();
-  if (!el) return;
+  const els = findSecteurInputs_();
+  if (!els.length) return;
 
-  if (isAdmin && typeof isAdmin === "function" && isAdmin()) {
-    el.disabled = false;
-    el.readOnly = false;
+  if (typeof isAdmin === "function" && isAdmin()) {
+    els.forEach(el => {
+      el.disabled = false;
+      el.readOnly = false;
+    });
     return;
   }
 
   const s = (sessionStorage.getItem("userSecteur") || "").trim();
-  if (s) el.value = s;
-  el.disabled = true;
-  el.readOnly = true;
+  els.forEach(el => {
+    if (s) el.value = s;
+    el.disabled = true;
+    el.readOnly = true;
+  });
 }
 
-// call after DOM ready
 document.addEventListener("DOMContentLoaded", () => {
   lockSecteurFieldSafe_();
 });
