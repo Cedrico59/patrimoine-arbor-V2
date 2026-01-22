@@ -69,6 +69,22 @@ function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
 
+
+// =========================
+// 👁️ VISIBILITÉ PAR SECTEUR
+// =========================
+function getUserSecteur() {
+  return (sessionStorage.getItem("userSecteur") || "").trim();
+}
+
+function canSeeTree(t) {
+  if (isAdmin()) return true;
+  const s = getUserSecteur();
+  if (!s) return false;
+  return String(t?.secteur || "").trim() === s;
+}
+
+
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
   return !!(t && t.etat && String(t.etat).trim() !== "");
@@ -734,9 +750,10 @@ async function readFilesAsDataUrls(files) {
 
     if (!list || !count) return;
 
-    const filtered = trees.filter((t) => treeMatchesQuery(t, q));
+    const visible = trees.filter(t => canSeeTree(t));
+    const filtered = visible.filter((t) => treeMatchesQuery(t, q));
 
-    count.textContent = `${filtered.length} / ${trees.length}`;
+    count.textContent = `${filtered.length} / ${visible.length}`;
     list.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -819,6 +836,7 @@ async function readFilesAsDataUrls(files) {
 
     const counts = {};
     for (const t of trees) {
+      if (!canSeeTree(t)) continue;
       const s = t.secteur || "Non défini";
       counts[s] = (counts[s] || 0) + 1;
     }
@@ -963,7 +981,12 @@ function addOrUpdateMarker(t) {
   function renderMarkers() {
     for (const m of markers.values()) map.removeLayer(m);
     markers.clear();
-    for (const t of trees) addOrUpdateMarker(t);
+
+    // ✅ Filtre secteur : admin voit tout, secteur voit uniquement son secteur
+    for (const t of trees) {
+      if (!canSeeTree(t)) continue;
+      addOrUpdateMarker(t);
+    }
   }
 
   function getQuartierFromLatLng(lat, lng) {
@@ -1653,9 +1676,9 @@ document.getElementById("loginBtn")?.addEventListener("click", async () => {
 
     // ✅ bonus : stocker infos user
     sessionStorage.setItem("userRole", data.role || "");
-    sessionStorage.setItem("userSecteur", data.secteur || "");
-
-    isAuthenticated = true;
+    \1
+      lockSecteurField();
+isAuthenticated = true;
 
     updateLogoutButtonVisibility();
     document.getElementById("loginOverlay").style.display = "none";
@@ -1698,99 +1721,27 @@ t.travaux = [
 
 
 // =========================
-// 📜 HISTORIQUE UI (MODALE)
+// 🔒 VERROUILLAGE SECTEUR (FORMULAIRE)
 // =========================
+function lockSecteurField() {
+  const secteurInput =
+    document.getElementById("secteur") ||
+    document.querySelector("[name='secteur']") ||
+    document.getElementById("treeSecteur");
 
-function parseHistoryDetails(detailsStr) {
-  try {
-    return JSON.parse(detailsStr);
-  } catch (e) {
-    return { raw: detailsStr };
-  }
-}
+  if (!secteurInput) return;
 
-function formatHistoryItem(item) {
-  const d = new Date(item.timestamp);
-  const dt = isNaN(d.getTime()) ? String(item.timestamp) : d.toLocaleString("fr-FR");
-
-  const details = parseHistoryDetails(item.details);
-
-  let detailsTxt = "";
-  if (details.changes && Array.isArray(details.changes)) {
-    detailsTxt = details.changes
-      .map(c => `• ${c.field}: "${c.from ?? ""}" → "${c.to ?? ""}"`)
-      .join("\n");
-  } else if (details.photoDriveId) {
-    detailsTxt = `Photo supprimée : ${details.photoDriveId}`;
-  } else if (details.deletedRow) {
-    detailsTxt = `Arbre supprimé (snapshot)`;
-  } else {
-    detailsTxt = JSON.stringify(details, null, 2);
+  if (isAdmin()) {
+    secteurInput.disabled = false;
+    secteurInput.readOnly = false;
+    return;
   }
 
-  return `
-<div class="history-line">
-🕒 ${dt}
-👤 ${item.login || "?"} (${item.role || "?"})
-📌 ${item.action}
-${detailsTxt}
-</div>`;
-}
-
-async function loadHistory(treeId) {
-  const content = document.getElementById("historyContent");
-  content.innerHTML = "<p>Chargement...</p>";
-
-  try {
-    const url = `${API_URL}?token=${encodeURIComponent(authToken)}&action=history&id=${encodeURIComponent(treeId)}&limit=50`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (!data.ok) {
-      content.innerHTML = `<p style="color:red;">Erreur : ${data.error || "impossible de charger"}</p>`;
-      return;
-    }
-
-    const list = data.history || [];
-    if (!list.length) {
-      content.innerHTML = "<p>Aucun historique pour cet arbre.</p>";
-      return;
-    }
-
-    content.innerHTML = list.map(formatHistoryItem).join("");
-  } catch (err) {
-    content.innerHTML = `<p style="color:red;">Erreur réseau</p>`;
+  const userSecteur = getUserSecteur();
+  if (userSecteur) {
+    secteurInput.value = userSecteur;
   }
+  secteurInput.disabled = true;
+  secteurInput.readOnly = true;
 }
 
-function openHistoryModal() {
-  const modal = document.getElementById("historyModal");
-  modal.classList.remove("hidden");
-}
-
-function closeHistoryModal() {
-  const modal = document.getElementById("historyModal");
-  modal.classList.add("hidden");
-}
-
-// Bouton Historique
-const btnHistory = document.getElementById("btnHistory");
-if (btnHistory) {
-  btnHistory.onclick = async () => {
-    if (!selectedId) return alert("Sélectionne un arbre d’abord.");
-    openHistoryModal();
-    await loadHistory(selectedId);
-  };
-}
-
-// Bouton fermer
-const closeBtn = document.getElementById("closeHistoryModal");
-if (closeBtn) closeBtn.onclick = closeHistoryModal;
-
-// Fermer en cliquant en dehors
-const historyModal = document.getElementById("historyModal");
-if (historyModal) {
-  historyModal.addEventListener("click", (e) => {
-    if (e.target === historyModal) closeHistoryModal();
-  });
-}
