@@ -1,3 +1,16 @@
+
+// =========================
+// SECTEUR FORCE (SAFE)
+// =========================
+function getForcedSecteur_(secteurValue) {
+  try {
+    if (typeof isAdmin === "function" && isAdmin()) return secteurValue;
+    return (sessionStorage.getItem("userSecteur") || "").trim();
+  } catch (e) {
+    return secteurValue;
+  }
+}
+
 (() => {
   "use strict";
 
@@ -1719,58 +1732,40 @@ t.travaux = [
     
 
 
-
-});
-
-
-
-
 // =========================
-// SECTEUR LOCK (ROBUSTE)
+// SECTEUR LOCK (MINIMAL SAFE)
 // =========================
-function findSecteurInputs_() {
-  const list = [];
+(function(){
+  function lockSecteur() {
+    try {
+      if (typeof isAdmin === "function" && isAdmin()) return;
+      const s = (sessionStorage.getItem("userSecteur") || "").trim();
+      if (!s) return;
 
-  const a = document.getElementById("secteur");
-  const b = document.getElementById("treeSecteur");
-  const c = document.querySelector("[name='secteur']");
-  if (a) list.push(a);
-  if (b) list.push(b);
-  if (c) list.push(c);
+      const els = [];
+      const direct = [
+        document.getElementById("secteur"),
+        document.getElementById("treeSecteur"),
+        document.querySelector("[name='secteur']")
+      ].filter(Boolean);
+      direct.forEach(el => els.push(el));
 
-  // fallback : tout champ dont id/name contient "secteur"
-  document.querySelectorAll("input, select, textarea").forEach(el => {
-    const id = (el.id || "").toLowerCase();
-    const nm = (el.name || "").toLowerCase();
-    if (id.includes("secteur") || nm.includes("secteur")) {
-      if (!list.includes(el)) list.push(el);
-    }
-  });
+      document.querySelectorAll("input, select, textarea").forEach(el => {
+        const id = (el.id || "").toLowerCase();
+        const nm = (el.name || "").toLowerCase();
+        if (id.includes("secteur") || nm.includes("secteur")) {
+          if (!els.includes(el)) els.push(el);
+        }
+      });
 
-  return list;
-}
-
-function lockSecteurFieldSafe_() {
-  const els = findSecteurInputs_();
-  if (!els.length) return;
-
-  if (typeof isAdmin === "function" && isAdmin()) {
-    els.forEach(el => {
-      el.disabled = false;
-      el.readOnly = false;
-    });
-    return;
+      els.forEach(el => {
+        el.value = s;
+        el.disabled = true;
+        el.readOnly = true;
+      });
+    } catch(e) {}
   }
 
-  const s = (sessionStorage.getItem("userSecteur") || "").trim();
-  els.forEach(el => {
-    if (s) el.value = s;
-    el.disabled = true;
-    el.readOnly = true;
-  });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  lockSecteurFieldSafe_();
-});
+  document.addEventListener("DOMContentLoaded", lockSecteur);
+})();
 
