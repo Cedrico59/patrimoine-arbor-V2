@@ -14,66 +14,6 @@
   />
 
   <style>
-
-/* =========================
-   MODALE HISTORIQUE
-========================= */
-.modal.hidden { display: none; }
-
-.modal {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.modal-card {
-  width: 90%;
-  max-width: 700px;
-  max-height: 80vh;
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: #f3f3f3;
-  border-bottom: 1px solid #ddd;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.modal-content {
-  padding: 12px 16px;
-  overflow: auto;
-  max-height: calc(80vh - 55px);
-  font-family: monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-}
-
-.history-line {
-  padding: 10px;
-  border: 1px solid #eee;
-  border-radius: 10px;
-  margin-bottom: 10px;
-  background: #fafafa;
-}
-
-
     :root { --bg:#0b1020; --panel:#111a33; --muted:#9db0ff; --text:#eef1ff; --line:#20305f; --accent:#6aa6ff; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
@@ -534,6 +474,16 @@ body.agent-mode button {
       <label>Commentaire</label>
       <textarea id="comment" placeholder="Note d’observation, état sanitaire, histoire, etc."></textarea>
 
+    <div class="form-group" id="historyInterventionsGroup">
+      <label for="historyInterventions">Historique des interventions</label>
+      <textarea id="historyInterventions" placeholder="Historique des interventions (généré via le bouton Valider)" rows="5"></textarea>
+    </div>
+
+    <button id="btnValiderIntervention" type="button" class="secondary-btn">
+      ✅ Valider intervention
+    </button>
+
+
       <label>Photos (jpg/png)</label>
   <div class="photo-actions">
   <button type="button" id="takePhotoBtn" class="secondary">
@@ -617,23 +567,6 @@ body.agent-mode button {
   </div>
 </div>
 
-
-
-<!-- =========================
-     MODALE HISTORIQUE
-========================= -->
-<div id="historyModal" class="modal hidden">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h3>📜 Historique des modifications</h3>
-      <button id="closeHistoryModal" class="btn small">✖</button>
-    </div>
-
-    <div id="historyContent" class="modal-content">
-      <p>Chargement...</p>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>

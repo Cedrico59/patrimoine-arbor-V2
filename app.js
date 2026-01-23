@@ -1,16 +1,3 @@
-
-// =========================
-// SECTEUR FORCE (SAFE)
-// =========================
-function getForcedSecteur_(secteurValue) {
-  try {
-    if (typeof isAdmin === "function" && isAdmin()) return secteurValue;
-    return (sessionStorage.getItem("userSecteur") || "").trim();
-  } catch (e) {
-    return secteurValue;
-  }
-}
-
 (() => {
   "use strict";
 
@@ -81,22 +68,6 @@ let isAuthenticated = !!authToken;
 function isAdmin() {
   return (sessionStorage.getItem("userRole") || "").toLowerCase() === "admin";
 }
-
-
-// =========================
-// 👁️ VISIBILITÉ PAR SECTEUR
-// =========================
-function getUserSecteur() {
-  return (sessionStorage.getItem("userSecteur") || "").trim();
-}
-
-function canSeeTree(t) {
-  if (isAdmin()) return true;
-  const s = getUserSecteur();
-  if (!s) return false;
-  return String(t?.secteur || "").trim() === s;
-}
-
 
 function isPastilleTree(t){
   // ici la "pastille" correspond à un état défini
@@ -763,10 +734,9 @@ async function readFilesAsDataUrls(files) {
 
     if (!list || !count) return;
 
-    const visible = trees.filter(t => canSeeTree(t));
-    const filtered = visible.filter((t) => treeMatchesQuery(t, q));
+    const filtered = trees.filter((t) => treeMatchesQuery(t, q));
 
-    count.textContent = `${filtered.length} / ${visible.length}`;
+    count.textContent = `${filtered.length} / ${trees.length}`;
     list.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -849,7 +819,6 @@ async function readFilesAsDataUrls(files) {
 
     const counts = {};
     for (const t of trees) {
-      if (!canSeeTree(t)) continue;
       const s = t.secteur || "Non défini";
       counts[s] = (counts[s] || 0) + 1;
     }
@@ -994,12 +963,7 @@ function addOrUpdateMarker(t) {
   function renderMarkers() {
     for (const m of markers.values()) map.removeLayer(m);
     markers.clear();
-
-    // ✅ Filtre secteur : admin voit tout, secteur voit uniquement son secteur
-    for (const t of trees) {
-      if (!canSeeTree(t)) continue;
-      addOrUpdateMarker(t);
-    }
+    for (const t of trees) addOrUpdateMarker(t);
   }
 
   function getQuartierFromLatLng(lat, lng) {
@@ -1732,40 +1696,69 @@ t.travaux = [
     
 
 
+
 // =========================
-// SECTEUR LOCK (MINIMAL SAFE)
+// HISTORIQUE INTERVENTIONS
 // =========================
-(function(){
-  function lockSecteur() {
-    try {
-      if (typeof isAdmin === "function" && isAdmin()) return;
-      const s = (sessionStorage.getItem("userSecteur") || "").trim();
-      if (!s) return;
-
-      const els = [];
-      const direct = [
-        document.getElementById("secteur"),
-        document.getElementById("treeSecteur"),
-        document.querySelector("[name='secteur']")
-      ].filter(Boolean);
-      direct.forEach(el => els.push(el));
-
-      document.querySelectorAll("input, select, textarea").forEach(el => {
-        const id = (el.id || "").toLowerCase();
-        const nm = (el.name || "").toLowerCase();
-        if (id.includes("secteur") || nm.includes("secteur")) {
-          if (!els.includes(el)) els.push(el);
-        }
-      });
-
-      els.forEach(el => {
-        el.value = s;
-        el.disabled = true;
-        el.readOnly = true;
-      });
-    } catch(e) {}
+function isSecteurUser_() {
+  try { return (sessionStorage.getItem("userRole") || "").trim() === "secteur"; } catch(e) { return false; }
+}
+function formatInterventionLine_(t) {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,"0");
+  const dd = String(today.getDate()).padStart(2,"0");
+  const stamp = `${yyyy}-${mm}-${dd}`;
+  const parts = [
+    `dateDemande=${t.dateDemande||""}`,
+    `natureTravaux=${t.natureTravaux||""}`,
+    `dateDemandeDevis=${t.dateDemandeDevis||""}`,
+    `devisNumero=${t.devisNumero||""}`,
+    `montantDevis=${t.montantDevis||""}`,
+    `dateExecution=${t.dateExecution||""}`,
+    `remarquesTravaux=${t.remarquesTravaux||""}`,
+    `numeroBDC=${t.numeroBDC||""}`,
+    `numeroFacture=${t.numeroFacture||""}`
+  ];
+  return `[${stamp}] ` + parts.join(" | ");
+}
+function lockHistoriqueInterventionsUI_() {
+  const g = document.getElementById("historyInterventionsGroup");
+  const ta = document.getElementById("historyInterventions");
+  const btn = document.getElementById("btnValiderIntervention");
+  if (!g || !ta || !btn) return;
+  if (isSecteurUser_()) {
+    g.style.display = "none";
+    btn.style.display = "none";
+  } else {
+    g.style.display = "";
+    btn.style.display = "";
+    ta.readOnly = false;
+    ta.disabled = false;
+    btn.disabled = false;
   }
+}
+function bindValiderIntervention_(getCurrentTree, saveCurrentTree) {
+  const btn = document.getElementById("btnValiderIntervention");
+  const hist = document.getElementById("historyInterventions");
+  if (!btn || !hist) return;
 
-  document.addEventListener("DOMContentLoaded", lockSecteur);
-})();
+  btn.addEventListener("click", async () => {
+    const tree = getCurrentTree();
+    if (!tree || !tree.id) return;
 
+    const line = formatInterventionLine_(tree);
+    const current = (hist.value || "").trim();
+    hist.value = current ? (line + "\n" + current) : line; // plus récent en haut
+    tree.historiqueInterventions = hist.value;
+
+    // vider champs travaux
+    const ids = ["dateDemande","natureTravaux","dateDemandeDevis","devisNumero","montantDevis","dateExecution","remarquesTravaux","numeroBDC","numeroFacture"];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    // mettre aussi vide dans l'objet
+    tree.dateDemande=""; tree.natureTravaux=""; tree.dateDemandeDevis=""; tree.devisNumero=""; tree.montantDevis="";
+    tree.dateExecution=""; tree.remarquesTravaux=""; tree.numeroBDC=""; tree.numeroFacture="";
+
+    await saveCurrentTree(tree);
+  });
+}
